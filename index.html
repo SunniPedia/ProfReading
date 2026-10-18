@@ -1098,7 +1098,7 @@
   const TTS_MAX  = 180;                                      // এক খণ্ডে সর্বোচ্চ অক্ষর (Google সীমা ~200)
   const TTS_SENT = /[।.?!۔؟]["”’'\)\]]*$/;                    // বাক্য শেষ
   let voices = [], ttsWarned = {};
-  const tts = {id:0, chunks:[], i:0, state:'idle', start:0, u:null, ga:null, cache:{}, forceG:false, wd:0, stale:false};   // state: idle | playing | paused
+  const tts = {id:0, chunks:[], i:0, state:'idle', start:0, u:null, ga:null, cache:{}, forceG:false, noG:false, retry:{}, wd:0, stale:false};   // state: idle | playing | paused
 
   function loadVoices() { try { voices = hasTTS ? (speechSynthesis.getVoices() || []) : []; } catch(e) { voices = []; } }
   if (hasTTS) { loadVoices(); try { speechSynthesis.addEventListener('voiceschanged', loadVoices); } catch(e) {} }
@@ -1188,7 +1188,7 @@
   }
   function killAudio(a) {
     if (!a) return;
-    try { a.onplay = a.onended = a.onerror = null; a.pause(); a.removeAttribute('src'); a.load(); } catch(e) {}
+    try { a.onplay = a.onplaying = a.onended = a.onerror = null; a.pause(); a.removeAttribute('src'); a.load(); } catch(e) {}
   }
   function clearG() {
     killAudio(tts.ga); tts.ga = null;
@@ -1211,35 +1211,59 @@
   }
 
   // --- Google অনলাইন অডিও ---
-  function gAudio(i) {
+  function gAudio(i, bust) {
     if (tts.cache[i]) return tts.cache[i];
     const c = tts.chunks[i]; if (!c) return null;
     const a = new Audio();
     a.preload = 'auto';
     try { a.referrerPolicy = 'no-referrer'; } catch(e) {}
-    a.src = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=' + G_LANG[c.lang] + '&q=' + encodeURIComponent(c.t);
+    a.src = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=' + G_LANG[c.lang] + '&total=1&idx=0&textlen=' + c.t.length + '&q=' + encodeURIComponent(c.t) + (bust ? '&_=' + Date.now() : '');
     tts.cache[i] = a;
     return a;
   }
-  function playG(i, id) {
+  // Google অডিও ব্যর্থ হলে: ৩ বার পুনঃচেষ্টা (বিরতি বাড়িয়ে) → তারপর ফোনের TTS (থাকলে) → নইলে ওই খণ্ডে থেমে থাকে; "চালান" চাপলে সেখান থেকেই চলে
+  const G_RETRY = 3, G_WAIT = [1500, 4000, 9000];
+  function playG(i, id, bust) {
     if (id !== tts.id) return;
-    const c = tts.chunks[i], a = gAudio(i);
+    const c = tts.chunks[i], a = gAudio(i, bust);
     if (!a) { stopPlay(); return; }
     tts.ga = a;
     try { a.playbackRate = Math.min(2, Math.max(0.5, parseFloat(cfg.ttsRate) || 1)); a.preservesPitch = true; } catch(e) {}
-    a.onplay  = () => { if (id === tts.id) follow(c); };
-    a.onended = () => { if (id === tts.id) { delete tts.cache[i]; speakChunk(i + 1, id); } };
-    a.onerror = () => {
-      if (id !== tts.id) return;
-      stopPlay();
-      toast('Google অডিও পাওয়া যায়নি — ইন্টারনেট দেখুন (সার্ভিসটি ব্লক বা সীমিত হয়ে থাকতে পারে)', true, 6500);
+    let settled = false;
+    const pauseHere = msg => {
+      tts.id++; clearTimeout(tts.wd); cancelDev(); clearG();
+      tts.state = 'paused'; tts.i = i; ttsUI();
+      toast(msg, true, 9000);
     };
+    const fail = why => {
+      if (id !== tts.id || settled) return;
+      settled = true; clearTimeout(tts.wd);
+      killAudio(a); delete tts.cache[i]; if (tts.ga === a) tts.ga = null;
+      const n = tts.retry[i] = (tts.retry[i] || 0) + 1;
+      if (n <= G_RETRY) {
+        toast('Google অডিও আটকেছে (' + why + ') — আবার চেষ্টা ' + n + '/' + G_RETRY + '…', false, G_WAIT[n - 1]);
+        tts.wd = setTimeout(() => playG(i, id, true), G_WAIT[n - 1]);
+        return;
+      }
+      if ((cfg.ttsEngine || 'auto') === 'auto' && hasTTS && pickVoice(c.lang)) {
+        tts.noG = true;
+        toast('Google অনলাইন অডিও বারবার ব্যর্থ — বাকিটা ফোনের TTS-এ চলছে', false, 4000);
+        speakChunk(i, id); return;
+      }
+      pauseHere('Google অডিও পাওয়া যাচ্ছে না (' + why + ') — সার্ভিসটি সাময়িক ব্লক/সীমিত হতে পারে। কিছুক্ষণ পরে "চালান" চাপুন, এই জায়গা থেকেই চলবে। (স্থায়ী সমাধান: সেটিংসে "শুধু ফোনের TTS" + ফোনে বাংলা ভয়েস ডেটা)');
+    };
+    a.onplay    = () => { if (id === tts.id) follow(c); };
+    a.onplaying = () => { clearTimeout(tts.wd); };
+    a.onended   = () => { if (id === tts.id) { delete tts.cache[i]; speakChunk(i + 1, id); } };
+    a.onerror   = () => fail('সার্ভার অডিও দেয়নি');
+    clearTimeout(tts.wd); tts.wd = setTimeout(() => fail('সাড়া আসেনি'), 15000);   // নেটওয়ার্ক ঝুলে গেলে
     const p = a.play();
     if (p && p.catch) p.catch(err => {
       if (id !== tts.id) return;
-      if (err && err.name === 'AbortError') return;
-      stopPlay();
-      toast('অডিও চালানো যায়নি' + (err && err.name === 'NotAllowedError' ? ' — ব্রাউজার অনুমতি দেয়নি, আবার "শুনুন" চাপুন' : ' — ইন্টারনেট/সার্ভিস দেখুন'), true, 6500);
+      const nm = (err && err.name) || '';
+      if (nm === 'AbortError') return;
+      if (nm === 'NotAllowedError') { pauseHere('ব্রাউজার অডিও চালাতে দেয়নি — আবার "চালান" চাপুন'); return; }
+      fail(nm === 'NotSupportedError' ? 'সার্ভার অডিও ফেরত দেয়নি, সম্ভবত রেট-লিমিট' : (nm || 'অজানা ত্রুটি'));
     });
     if (i + 1 < tts.chunks.length) gAudio(i + 1);     // পরের খণ্ড আগাম লোড
   }
@@ -1251,7 +1275,8 @@
     tts.i = i;
     const c = tts.chunks[i], eng = cfg.ttsEngine || 'auto';
     const v = hasTTS ? pickVoice(c.lang) : null;
-    const useG = eng === 'google' || (eng === 'auto' && (tts.forceG || !hasTTS || !v));
+    const wantG = tts.forceG || !hasTTS || !v;
+    const useG = eng === 'google' || (eng === 'auto' && wantG && !(tts.noG && hasTTS && v));
     if (useG) { playG(i, id); return; }
     if (!hasTTS) { stopPlay(); toast('এই ব্রাউজারে ফোনের টেক্সট-টু-স্পিচ নেই — সেটিংসে ইঞ্জিন "স্বয়ংক্রিয়" বা "Google অনলাইন" করুন', true, 6000); return; }
 
@@ -1296,6 +1321,7 @@
   function startFrom(i) {
     tts.id++;
     const id = tts.id;
+    tts.retry = {}; tts.noG = false;      // নতুন করে শুরু/চালান: Google আবার প্রথম থেকে চেষ্টা
     clearTimeout(tts.wd);
     cancelDev();
     tts.state = 'playing'; ttsUI();

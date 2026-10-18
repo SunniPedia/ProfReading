@@ -57,10 +57,14 @@
   #ttsBox{display:inline-flex;align-items:center;gap:6px;padding-left:8px;margin-left:2px;border-left:1px solid var(--line)}
 
   /* API বাটন: হেডারের একদম শেষে, শুধু আইকন */
-  #apiBox{display:inline-flex;align-items:center;padding-left:8px;margin-left:2px;border-left:1px solid var(--line)}
+  #apiBox{display:inline-flex;align-items:center;gap:6px;padding-left:8px;margin-left:2px;border-left:1px solid var(--line)}
   #btnApi.run{background:var(--pri);border-color:var(--pri);color:var(--pri-fg)}
   #btnApi.run .i{animation:apiPulse 1s ease-in-out infinite}
   @keyframes apiPulse{50%{opacity:.3}}
+  /* অটো OCR টগল: সবুজ = চালু, লাল = বন্ধ */
+  #btnAutoApi.on{background:var(--ok);border-color:var(--ok);color:#fff}
+  #btnAutoApi.off{background:var(--err);border-color:var(--err);color:#fff}
+  @media (prefers-color-scheme:dark){#btnAutoApi.on,#btnAutoApi.off{color:#0b0d10}}
 
   /* নিজস্ব ড্রপডাউন (পপআপ তালিকাতেও একই ফন্ট) */
   .dd-btn{justify-content:space-between;gap:6px;text-align:left}
@@ -163,6 +167,7 @@
     <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
     <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
     <symbol id="i-api" viewBox="0 0 24 24"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
   </defs>
 </svg>
 
@@ -185,7 +190,7 @@
       <option value="1.2">1.2×</option><option value="1.5">1.5×</option><option value="1.8">1.8×</option><option value="2">2×</option>
     </select>
   </span>
-  <span id="apiBox"><button id="btnApi" class="ico" title="API — ছবি থেকে টেক্সট (এপি আই - ১) / টেক্সট প্রুফিং (এপি আই - ২)" aria-label="API"><svg class="i"><use href="#i-api"/></svg></button></span>
+  <span id="apiBox"><button id="btnAutoApi" class="ico on" title="অটো OCR" aria-label="অটো OCR" aria-pressed="true"><svg class="i"><use href="#i-bolt"/></svg></button><button id="btnApi" class="ico" title="API — ছবি থেকে টেক্সট (এপি আই - ১) / টেক্সট প্রুফিং (এপি আই - ২)" aria-label="API"><svg class="i"><use href="#i-api"/></svg></button></span>
 </header>
 <div id="status"></div>
 
@@ -238,7 +243,7 @@
   <input id="cBranch" type="text" placeholder="main" autocapitalize="off" autocomplete="off">
   <label for="cToken">GitHub Access Token (এখানে বসান)</label>
   <input id="cToken" type="password" placeholder="github_pat_..." autocapitalize="off" autocomplete="off">
-  <small>টোকেন শুধু এই ব্রাউজারে সংরক্ষিত থাকে (localStorage)। HTML ফাইলে বা রিপোতে কখনো লিখবেন না। সেভ/পুশ করতে টোকেনে এই রিপোর জন্য <b>Contents: Read and write</b> অনুমতি লাগবে।</small>
+  <small>টোকেন শুধু এই ব্রাউজারে সংরক্ষিত থাকে (localStorage; এক্সটেনশনে অতিরিক্ত extension storage-এও)। এখানে যা-ই লিখুন/বদলান, সাথে সাথে স্বয়ংক্রিয়ভাবে সংরক্ষিত হয় — প্রতিবার দিতে হবে না। HTML ফাইলে বা রিপোতে কখনো লিখবেন না। সেভ/পুশ করতে টোকেনে এই রিপোর জন্য <b>Contents: Read and write</b> অনুমতি লাগবে।</small>
   <label for="cPages">ছবির ফোল্ডার</label>
   <input id="cPages" type="text" autocapitalize="off">
   <label for="cTexts">টেক্সট ফোল্ডার (না থাকলে প্রথম সেভে নিজে থেকে তৈরি হবে)</label>
@@ -262,7 +267,7 @@
   <small>ফোনের ভয়েস ডিভাইসের টেক্সট-টু-স্পিচ ইঞ্জিন থেকে আসে (শুধু ফোনের TTS ব্যবহার হলে প্রযোজ্য)। "স্বয়ংক্রিয়" রাখলে ডিভাইসের সেরা মিল ব্যবহার হবে।</small>
   <div class="row">
     <button id="cClearTok">টোকেন মুছুন</button>
-    <button id="cCancel">বাতিল</button>
+    <button id="cCancel">বন্ধ</button>
     <button id="cSave" class="primary">সংরক্ষণ ও সংযোগ</button>
   </div>
 </dialog>
@@ -292,10 +297,10 @@
   <label class="chk" id="aImgRow"><input id="aImg" type="checkbox"><span>পেইজের ছবিও সাথে পাঠান (ছবির সাথে মিলিয়ে প্রুফ করার জন্য)</span></label>
   <label class="chk" id="aAutoRow"><input id="aAuto" type="checkbox"><span>টেক্সট ফাঁকা পেইজ খুললে নিজে থেকেই চালান (অটো OCR)</span></label>
   <small id="aAutoHint">শর্ত: Key দেওয়া আছে, পেইজের টেক্সট ফাঁকা (txt নেই/খালি, খসড়াও নেই), পেইজটি প্রুফড নয়। প্রতি পেইজে সেশনে একবারই অটো চলে।</small>
-  <small>কী ও প্রম্পট শুধু এই ব্রাউজারে (localStorage) থাকে — একবার দিলে পরের পেইজেও একই থাকবে। রিপোতে কখনো যায় না।</small>
+  <small>কী, মডেল, প্রম্পট ইত্যাদি শুধু এই ব্রাউজারে (localStorage; এক্সটেনশনে extension storage-এও) থাকে। কিছু বদলালেই সাথে সাথে স্বয়ংক্রিয়ভাবে সংরক্ষিত হয় — একবার দিলে পরেও একই থাকবে। রিপোতে কখনো যায় না।</small>
   <div class="row">
     <button id="aDefault" type="button" title="প্রম্পট ডিফল্টে ফিরিয়ে আনুন">ডিফল্ট প্রম্পট</button>
-    <button id="aCancel" type="button">বাতিল</button>
+    <button id="aCancel" type="button">বন্ধ</button>
     <button id="aSave" type="button">সংরক্ষণ</button>
     <button id="aRun" type="button" class="primary">সংরক্ষণ ও চালান</button>
   </div>
@@ -303,7 +308,34 @@
 
 <div id="toast"></div>
 
-<script>
+<script>(async () => {
+  // ---------- স্থায়ী সংরক্ষণ ----------
+  // localStorage-এর পাশাপাশি, এক্সটেনশনে হলে chrome.storage.local-এও (Token, API Key, Prompt, Model, সেটিংস, খসড়া) অনুলিপি রাখা হয়।
+  // শুরুতে সেখান থেকে ফিরিয়ে আনা হয়, তাই প্রতিবার নতুন করে দিতে হয় না। সাধারণ HTML-এ শুধু localStorage (+ স্থায়ী-স্টোরেজ অনুরোধ)।
+  const KP_EXT = (typeof browser !== 'undefined' && browser.storage && browser.storage.local) ? browser
+               : (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) ? chrome : null;
+  const KP_KEYS = ['kitab_proof_cfg_v1', 'kitab_proof_drafts_v1'];
+  const kpPend = {}; let kpT = 0;
+  function kpFlush() {
+    clearTimeout(kpT);
+    const o = {...kpPend}; Object.keys(kpPend).forEach(k => delete kpPend[k]);
+    if (!KP_EXT || !Object.keys(o).length) return;
+    try { const p = KP_EXT.storage.local.set(o); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  }
+  function kpMirror(k, v) { if (!KP_EXT) return; kpPend[k] = v; clearTimeout(kpT); kpT = setTimeout(kpFlush, 200); }
+  addEventListener('pagehide', kpFlush);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') kpFlush(); });
+  if (KP_EXT) {
+    try {
+      const got = await KP_EXT.storage.local.get(KP_KEYS);
+      for (const k of KP_KEYS) {
+        if (typeof got[k] === 'string' && got[k]) { try { localStorage.setItem(k, got[k]); } catch (e) {} }   // এক্সটেনশন স্টোরেজই মূল
+        else { let v = null; try { v = localStorage.getItem(k); } catch (e) {} if (v) kpMirror(k, v); }         // আগের localStorage থেকে স্থানান্তর
+      }
+    } catch (e) {}
+  }
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}   // ব্রাউজার যেন ডেটা নিজে থেকে মুছে না ফেলে
+
 (() => {
   const $ = id => document.getElementById(id);
   const ic = n => '<svg class="i"><use href="#i-' + n + '"/></svg>';   // ছোট ভেক্টর আইকন
@@ -360,15 +392,16 @@
     [1, 2].forEach(n => { if (cfg['api' + n].model === 'gemini-3.5-flash') cfg['api' + n].model = 'gemini-3.5-flash-lite'; });
     cfg.apiMig1 = 1;
   }
-  const saveCfg = () => { try { localStorage.setItem(CK, JSON.stringify(cfg)); } catch(e) {} };
+  const saveCfg = () => { let v; try { v = JSON.stringify(cfg); } catch(e) { return; } try { localStorage.setItem(CK, v); } catch(e) {} kpMirror(CK, v); };
 
   let drafts = {};
   try { drafts = JSON.parse(localStorage.getItem(DK) || '{}') || {}; } catch(e) { drafts = {}; }
   const dk = stem => cfg.repo + '/' + stem;
   let quotaWarned = false;
   function persistDrafts() {
-    try { localStorage.setItem(DK, JSON.stringify(drafts)); return true; }
+    try { const v = JSON.stringify(drafts); kpMirror(DK, v); localStorage.setItem(DK, v); return true; }
     catch(e) {
+      if (KP_EXT) return true;   // এক্সটেনশন স্টোরেজে খসড়া নিরাপদ আছে
       if (!quotaWarned) { quotaWarned = true; toast('লোকাল স্টোরেজে খসড়া রাখা যাচ্ছে না (জায়গা শেষ?) — দ্রুত সেভ করুন', true); }
       return false;
     }
@@ -870,7 +903,7 @@
   $('cCancel').onclick = () => $('dlg').close();
   $('cClearTok').onclick = () => { $('cToken').value = ''; cfg.token = ''; saveCfg(); toast('টোকেন মুছে ফেলা হয়েছে'); };
   $('cSave').onclick = () => {
-    const oldRepo = cfg.repo, oldBr = cfg.branch;
+    const oldRepo = connected.repo, oldBr = connected.branch;
     const repo = $('cRepo').value.trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '');
     if (!/^[^\/\s]+\/[^\/\s]+$/.test(repo)) { toast('রিপো owner/repo আকারে দিন', true); return; }
     cfg.repo = repo;
@@ -883,11 +916,32 @@
     cfg.tts = {bn: $('cVoiceBn').value, ar: $('cVoiceAr').value, en: $('cVoiceEn').value};
     tts.forceG = false;                 // ইঞ্জিন/ভয়েস বদলালে স্বয়ংক্রিয় ফলব্যাক আবার প্রথম থেকে
     if (cfg.repo !== oldRepo || cfg.branch !== oldBr) { cfg.last = ''; cfg.view = null; }
+    connected.repo = cfg.repo; connected.branch = cfg.branch;
     saveCfg();
     imgCache.clear();
     forceInit = true;
     $('dlg').close();
   };
+  // ---------- স্বয়ংক্রিয় সংরক্ষণ (সেটিংস): ফর্মে যা বদলাবে সাথে সাথে সংরক্ষিত হবে ----------
+  const connected = {repo: cfg.repo, branch: cfg.branch};   // সর্বশেষ যে রিপো/ব্রাঞ্চে সংযোগ হয়েছে
+  const normRepo = v => v.trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '');
+  const SETTINGS_FIELDS = {
+    cRepo:    v => { const r = normRepo(v); if (/^[^\/\s]+\/[^\/\s]+$/.test(r)) cfg.repo = r; },
+    cBranch:  v => { cfg.branch = v.trim(); },
+    cToken:   v => { cfg.token = v.trim(); },
+    cPages:   v => { cfg.pagesDir = v.trim().replace(/^\/+|\/+$/g, '') || 'pages'; },
+    cTexts:   v => { cfg.textsDir = v.trim().replace(/^\/+|\/+$/g, '') || 'texts'; },
+    cProof:   v => { cfg.proofFile = v.trim().replace(/^\/+/, '') || 'proofed.json'; },
+    cEngine:  v => { cfg.ttsEngine = v; tts.forceG = false; },
+    cVoiceBn: v => { cfg.tts = {...cfg.tts, bn: v}; },
+    cVoiceAr: v => { cfg.tts = {...cfg.tts, ar: v}; },
+    cVoiceEn: v => { cfg.tts = {...cfg.tts, en: v}; }
+  };
+  Object.keys(SETTINGS_FIELDS).forEach(id => {
+    const el = $(id), h = () => { SETTINGS_FIELDS[id](el.value); saveCfg(); };
+    el.addEventListener('input', h); el.addEventListener('change', h);
+  });
+
   // ডায়ালগ বন্ধ হলে: সেভ করলে বা প্রথমবার (তালিকা নেই) হলে সংযোগ শুরু
   $('dlg').addEventListener('close', () => {
     closeDD();
@@ -1529,6 +1583,24 @@
     }, 900);                                                              // দ্রুত পেইজ উল্টানোর সময় অযথা কল ঠেকাতে সামান্য অপেক্ষা
   }
 
+  // ---------- অটো OCR টগল (সবুজ = চালু, লাল = বন্ধ) ----------
+  function applyAutoApi() {
+    const b = $('btnAutoApi'), on = !!cfg.api1.auto;
+    b.classList.toggle('on', on); b.classList.toggle('off', !on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.title = on
+      ? 'অটো OCR চালু (সবুজ) — ' + API_NAME[1] + '-এর Key দেওয়া থাকলে টেক্সট ফাঁকা পেইজ খুললে নিজে থেকে চলবে। বন্ধ করতে চাপুন'
+      : 'অটো OCR বন্ধ (লাল) — API কনফিগার থাকলেও নিজে থেকে চলবে না (হাতে API আইকন থেকে চালানো যাবে)। চালু করতে চাপুন';
+  }
+  $('btnAutoApi').onclick = () => {
+    const c = cfg.api1;
+    c.auto = !c.auto; autoPause = false; saveCfg(); applyAutoApi();
+    if (c.auto) {
+      toast(!c.key ? 'অটো OCR চালু — তবে ' + API_NAME[1] + '-এর Key এখনো দেওয়া নেই' : 'অটো OCR চালু (সবুজ)');
+      maybeAutoOcr();
+    } else { clearTimeout(autoT); toast('অটো OCR বন্ধ (লাল) — নিজে থেকে আর চলবে না'); }
+  };
+
   // ---------- API ডায়ালগ ----------
   let apiN = 1;
   const keyState = n => (cfg['api' + n].key || (n === 2 && cfg.api1.key)) ? 'Key সেট আছে' : 'Key নেই';
@@ -1566,7 +1638,7 @@
     if (apiN === 2) c.sendImg = $('aImg').checked;
     if (apiN === 1) c.auto = $('aAuto').checked;
     autoPause = false;                  // নতুন করে সংরক্ষণ করলে অটো আবার চালু
-    saveCfg();
+    saveCfg(); applyAutoApi();
   }
   $('btnApi').onclick = () => {
     if (apiRun) { if (confirm(API_NAME[apiRun.n] + ' চলছে। থামাবেন?')) apiRun.ctrl.abort(); return; }
@@ -1576,7 +1648,7 @@
   $('apiPick2').onclick = () => openApiCfg(2);
   $('apiPickClose').onclick = () => $('dlgApi').close();
   $('aCancel').onclick = () => $('dlgCfg').close();
-  $('aDefault').onclick = () => { $('aPrompt').value = API_DEF[apiN].prompt; toast('ডিফল্ট প্রম্পট বসানো হয়েছে — সংরক্ষণ করলে থাকবে'); };
+  $('aDefault').onclick = () => { $('aPrompt').value = API_DEF[apiN].prompt; readApiForm(); toast('ডিফল্ট প্রম্পট বসানো ও সংরক্ষিত হয়েছে'); };
   $('aSave').onclick = () => { readApiForm(); $('dlgCfg').close(); toast(API_NAME[apiN] + ' সংরক্ষিত'); };
   $('aRun').onclick = () => {
     readApiForm();
@@ -1587,12 +1659,19 @@
     runApi(apiN);
   };
 
+  // API ফর্মের যেকোনো ঘর বদলালেই সাথে সাথে স্বয়ংক্রিয় সংরক্ষণ (Key, Model, Prompt, Temperature, টিক-বক্স)
+  ['aKey', 'aModel', 'aPrompt', 'aTemp', 'aImg', 'aAuto'].forEach(id => {
+    const el = $(id), h = () => { if ($('dlgCfg').open) readApiForm(); };
+    el.addEventListener('input', h); el.addEventListener('change', h);
+  });
+
   // সব <select> কে নিজস্ব ফন্টের ড্রপডাউনে রূপান্তর
   ['sel', 'ttsRate', 'cEngine', 'cVoiceBn', 'cVoiceAr', 'cVoiceEn'].forEach(id => enhanceSelect($(id)));
 
-  applyZoom(); applyFont(); applySwap(); applyAuto(); updateStatus();
+  applyZoom(); applyFont(); applySwap(); applyAuto(); applyAutoApi(); updateStatus();
   if (!cfg.token) openSettings();   // প্রথমবার টোকেন চাইবে; বাতিল করলে শুধু-পড়া মোডে চলবে
   else init();
+})();
 })();
 </script>
 </body>

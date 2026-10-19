@@ -38,6 +38,15 @@
   button.on{background:var(--ok);border-color:var(--ok);color:#fff}
   @media (prefers-color-scheme:dark){button.on{color:#0b0d10}}
   button:disabled{opacity:.5;cursor:default}
+  /* ক্লিক রিপল ইফেক্ট (Material ripple): চাপলে চাপার বিন্দু থেকে বৃত্তাকার ঢেউ ছড়ায় */
+  button,.dd-it{position:relative;overflow:hidden;isolation:isolate}
+  /* রিপল: হালকা সবুজ ঢেউ (সাধারণ বোতামে উজ্জ্বল সবুজ, সবুজ বোতামে সাদাটে-সবুজ) + চেপে ধরা অবস্থায় বোতাম হালকা সবুজ আভা */
+  .rip{position:absolute;border-radius:50%;pointer-events:none;background:rgba(34,197,94,.6);transform:scale(0);opacity:.9;animation:rip .75s ease-out forwards}
+  button.on .rip{background:rgba(220,252,231,.9)}
+  @keyframes rip{0%{transform:scale(0);opacity:.9}65%{opacity:.55}100%{transform:scale(1);opacity:0}}
+  button:active:not(:disabled),.dd-it:active{box-shadow:inset 0 0 0 999px rgba(34,197,94,.18)}
+  @media (prefers-color-scheme:dark){.rip{background:rgba(74,222,128,.6)}button.on .rip{background:rgba(21,128,61,.55)}}
+  @media (prefers-reduced-motion:reduce){.rip{display:none}}
   select:focus,input:focus,button:focus-visible{outline:2px solid var(--pri);outline-offset:1px}
 
   /* হেডার ও ফুটার: সবসময় এক লাইনে (inline); জায়গা না হলে আড়াআড়ি স্ক্রল */
@@ -128,6 +137,18 @@
          font-size:13px;max-width:90vw;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50}
   #toast.show{opacity:1}
   #toast.err{background:var(--err)}
+  /* কাস্টম লোডিং টোস্ট ("সেভ ও পরের"): ঘূর্ণি + ধাপের নাম + প্রগ্রেস বার */
+  #ltoast{position:fixed;left:50%;bottom:64px;transform:translate(-50%,8px);background:#222;color:#fff;padding:10px 16px 13px;border-radius:12px;
+          display:flex;align-items:center;gap:12px;min-width:260px;max-width:90vw;font-size:13px;line-height:1.45;overflow:hidden;
+          opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:51;box-shadow:0 6px 22px rgba(0,0,0,.35)}
+  #ltoast.show{opacity:1;transform:translate(-50%,0)}
+  #ltoast .lt-spin{flex:none;width:22px;height:22px;border-radius:50%;border:3px solid rgba(255,255,255,.28);border-top-color:#4ade80;animation:ltspin .8s linear infinite}
+  #ltoast .lt-txt{display:flex;flex-direction:column;min-width:0}
+  #ltoast .lt-txt b{font-weight:600}
+  #ltoast .lt-txt small{opacity:.75;font-size:11px}
+  #ltoast .lt-pct{flex:none;margin-left:auto;padding-left:10px;min-width:46px;text-align:right;font-size:15px;font-weight:700;color:#4ade80;font-variant-numeric:tabular-nums}
+  #ltoast .lt-bar{position:absolute;left:0;bottom:0;height:3px;width:0;background:#4ade80;transition:width .2s linear}
+  @keyframes ltspin{to{transform:rotate(360deg)}}
 
   /* লাইটবক্স: ছবিতে ক্লিক করলে পপআপ, যেকোনো জায়গায় ক্লিক করলে বন্ধ */
   #lb{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;
@@ -307,6 +328,7 @@
 </dialog>
 
 <div id="toast"></div>
+<div id="ltoast" role="status" aria-live="polite" aria-hidden="true"><span class="lt-spin" aria-hidden="true"></span><span class="lt-txt"><b id="ltTitle">লোড হচ্ছে…</b><small id="ltStep"></small></span><b class="lt-pct" id="ltPct">0%</b><span class="lt-bar"></span></div>
 
 <script>(async () => {
   // ---------- স্থায়ী সংরক্ষণ ----------
@@ -334,6 +356,47 @@
       }
     } catch (e) {}
   }
+  // ---------- ক্লিক রিপল ইফেক্ট ----------
+  // বোতাম ও ড্রপডাউনের আইটেমে চাপলে (মাউস/টাচ/কিবোর্ড) চাপার জায়গা থেকে হালকা সবুজ ঢেউ ছড়ায়।
+  // ঢেউ স্ক্রল/আঙুল নড়লেও মুছে যায় না; বোতামের লেখা বদলে গেলেও (যেমন শুনুন→বিরতি) ঢেউ শেষ পর্যন্ত চলে।
+  // "মোশন কমান" সেটিং চালু থাকলে দেখায় না।
+  (() => {
+    const SEL = 'button,.dd-it';
+    const reduce = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+    const recs = new WeakMap();     // বোতাম → {el, t0}
+    const DUR = 750;
+    function spawn(host, x, y) {
+      if (host.disabled || host.getAttribute('aria-disabled') === 'true') return null;
+      if (reduce && reduce.matches) return null;
+      const r = host.getBoundingClientRect();
+      if (!r.width || !r.height) return null;
+      const cx = x == null ? r.width / 2 : x - r.left, cy = y == null ? r.height / 2 : y - r.top;
+      const rad = Math.hypot(Math.max(cx, r.width - cx), Math.max(cy, r.height - cy));   // সবচেয়ে দূরের কোণ পর্যন্ত ছড়াবে
+      const el = document.createElement('span');
+      el.className = 'rip';
+      el.style.cssText = 'width:' + rad * 2 + 'px;height:' + rad * 2 + 'px;left:' + (cx - rad) + 'px;top:' + (cy - rad) + 'px';
+      el.addEventListener('animationend', () => el.remove(), {once: true});
+      host.appendChild(el);
+      recs.set(host, {el, t0: performance.now()});
+      return el;
+    }
+    function revive(host) {          // বোতামের ভেতরের লেখা/আইকন নতুন করে বসালে ঢেউ মুছে যায় → বাকি সময়টুকুর জন্য ফেরত বসানো
+      const rec = recs.get(host); if (!rec) return;
+      const used = performance.now() - rec.t0;
+      if (rec.el.isConnected || used > DUR || !host.isConnected) return;
+      rec.el.style.animationDelay = '-' + used + 'ms';
+      host.appendChild(rec.el);
+    }
+    document.addEventListener('pointerdown', e => {
+      if (e.button > 0 || e.isPrimary === false) return;
+      const h = e.target.closest && e.target.closest(SEL); if (h) spawn(h, e.clientX, e.clientY);
+    }, true);
+    document.addEventListener('click', e => {   // capture পর্বে: বোতামের নিজস্ব onclick লেখা বদলানোর আগেই বোতামটি ধরে রাখা হয়
+      const h = e.target.closest && e.target.closest(SEL); if (!h) return;
+      if (e.detail === 0 || !recs.get(h)) spawn(h, e.detail === 0 ? null : e.clientX, e.detail === 0 ? null : e.clientY);   // কিবোর্ড/কোড-চালিত ক্লিক বা pointer ইভেন্ট না এলে
+      setTimeout(() => revive(h), 0); setTimeout(() => revive(h), 80);
+    }, true);
+  })();
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}   // ব্রাউজার যেন ডেটা নিজে থেকে মুছে না ফেলে
 
 (() => {
@@ -441,7 +504,55 @@
   const dirty = () => cur >= 0 && !ta.disabled && ta.value !== orig;
 
   let toastT;
+  // ---------- কাস্টম লোডিং টোস্ট ----------
+  // চলাকালীন সাধারণ (সফল) বার্তাগুলো জমিয়ে রাখা হয় ও শেষে একসাথে দেখানো হয়; ত্রুটি এলে লোডিং বন্ধ হয়ে ত্রুটির টোস্ট দেখায়।
+  const lt = {on: false, finishing: false, total: 1, k: 1, pct: 0, notes: [], tick: 0, doneT: 0};
+  function ltPaint() {                // % সংখ্যা ও প্রগ্রেস বার একসাথে হালনাগাদ
+    $('ltPct').textContent = Math.round(lt.pct) + '%';
+    $('ltoast').querySelector('.lt-bar').style.width = lt.pct + '%';
+  }
+  // আসল অগ্রগতি জানা যায় না (GitHub সাড়া না দেওয়া পর্যন্ত), তাই ধাপ চলাকালীন % ধীরে ধীরে এগোয় (ধাপের ৯২% পর্যন্ত);
+  // ধাপ শেষ হলে সরাসরি পরের ধাপের শুরুতে লাফ দেয়; সব শেষে ১০০%
+  function ltTick() {
+    const lo = (lt.k - 1) / lt.total * 100, hi = lt.k / lt.total * 100, cap = lo + (hi - lo) * 0.92;
+    if (lt.pct < cap) lt.pct = Math.min(cap, lt.pct + Math.max(0.15, (cap - lt.pct) * 0.07));
+    ltPaint();
+  }
+  function loadingStart(total) {
+    clearInterval(lt.tick); clearTimeout(lt.doneT);
+    lt.on = true; lt.finishing = false; lt.total = total; lt.k = 1; lt.pct = 0; lt.notes = [];
+    clearTimeout(toastT); $('toast').className = '';
+    ltPaint();
+    const t = $('ltoast'); t.classList.add('show'); t.setAttribute('aria-hidden', 'false');
+    lt.tick = setInterval(ltTick, 120);
+  }
+  function loadingStep(k, msg) {
+    if (!lt.on) return;
+    lt.k = k; lt.pct = Math.max(lt.pct, (k - 1) / lt.total * 100);
+    $('ltTitle').textContent = msg;
+    $('ltStep').textContent = 'ধাপ ' + k + '/' + lt.total;
+    ltPaint();
+  }
+  function loadingHide() {
+    clearInterval(lt.tick); clearTimeout(lt.doneT);
+    lt.on = false; lt.finishing = false;
+    const t = $('ltoast'); t.classList.remove('show'); t.setAttribute('aria-hidden', 'true');
+  }
+  function loadingDone(msg) {         // সফল শেষ: ১০০% দেখিয়ে (০.৪৫ সেকেন্ড) লোডিং বন্ধ → সফলতার টোস্ট
+    if (!lt.on) return;
+    clearInterval(lt.tick);
+    lt.finishing = true; lt.pct = 100; $('ltTitle').textContent = 'সম্পন্ন'; ltPaint();
+    lt.doneT = setTimeout(() => {
+      const notes = lt.notes.slice();
+      loadingHide();
+      toast(notes.length ? msg + ' • ' + notes.join(' • ') : msg, false, notes.length ? 3800 : 2400);
+    }, 450);
+  }
   function toast(msg, err, ms) {
+    if (lt.on) {
+      if (!err) { if (!/^সেভ হয়েছে/.test(msg)) lt.notes.push(msg); return; }
+      loadingHide();                  // ত্রুটি: লোডিং সরিয়ে ত্রুটির টোস্ট
+    }
     const t = $('toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
     clearTimeout(toastT); toastT = setTimeout(() => t.className = '', ms || (err ? 5000 : 1800));
   }
@@ -1362,14 +1473,31 @@
   ttsUI();
 
   $('btnSave').onclick = () => saveText();
+  let proofRunning = false;           // চলার সময় আবার চাপলে দ্বিতীয়বার চলবে না
   $('btnProof').onclick = async () => {
-    if (cur < 0 || ta.disabled) return;
+    if (cur < 0 || ta.disabled || proofRunning) return;
     if (!sha && !ta.value.trim() && !confirm('এই পেইজে কোনো টেক্সট নেই। তবুও প্রুফড চিহ্নিত করবেন?')) return;
-    const ok = await saveText();
-    if (!ok) return;
-    const stem = images[cur].stem;
-    if (!proofed.has(stem)) { if (!(await setProofed(stem, true))) return; }
-    if (cur + 1 < images.length) go(cur + 1); else toast('শেষ পেইজ — সেভ ও প্রুফড হয়েছে');
+    proofRunning = true; $('btnProof').setAttribute('aria-busy', 'true');
+    const stem = images[cur].stem, isLast = cur + 1 >= images.length, needProof = !proofed.has(stem);
+    let k = 0;
+    loadingStart(1 + (needProof ? 1 : 0) + (isLast ? 0 : 1));
+    try {
+      loadingStep(++k, dirty() ? 'টেক্সট সেভ হচ্ছে (GitHub-এ পুশ)…' : 'সেভ যাচাই হচ্ছে…');
+      const ok = await saveText();
+      if (!ok) { loadingHide(); return; }
+      if (needProof) {
+        loadingStep(++k, 'প্রুফড চিহ্নিত হচ্ছে…');
+        if (!(await setProofed(stem, true))) { loadingHide(); return; }
+      }
+      if (!isLast) {
+        loadingStep(++k, 'পরের পেইজ লোড হচ্ছে…');
+        await go(cur + 1);
+        loadingDone('সেভ ও প্রুফড হয়েছে • পরের পেইজ খোলা হয়েছে');
+      } else loadingDone('শেষ পেইজ — সেভ ও প্রুফড হয়েছে');
+    } finally {
+      if (lt.on && !lt.finishing) loadingHide();
+      proofRunning = false; $('btnProof').removeAttribute('aria-busy');
+    }
   };
   $('btnToggleProof').onclick = async () => {
     if (cur < 0) return;

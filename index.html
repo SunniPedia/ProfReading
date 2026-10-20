@@ -189,6 +189,7 @@
     <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
     <symbol id="i-api" viewBox="0 0 24 24"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/></symbol>
     <symbol id="i-bolt" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+    <symbol id="i-lens" viewBox="0 0 24 24"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="3.5"/></symbol>
   </defs>
 </svg>
 
@@ -221,6 +222,7 @@
       <span>ছবি</span>
       <button id="zOut">−</button><span id="zVal">100%</span><button id="zIn">+</button><button id="zFit">ফিট</button>
       <button id="btnDl" class="ico" title="এই পেইজের মূল ছবি ডাউনলোড করুন" aria-label="ডাউনলোড"><svg class="i"><use href="#i-download"/></svg></button>
+      <button id="btnLens" class="ico" title="এই পেইজের ছবি Google Lens-এ খুলুন (টেক্সট কপি করার জন্য)" aria-label="Google Lens"><svg class="i"><use href="#i-lens"/></svg></button>
     </div>
     <div class="body" id="imgBox">
       <img id="img" alt="" title="বড় করে দেখতে ক্লিক করুন">
@@ -481,6 +483,7 @@
   let restoreOnce = true, viewReady = false;
   const imgCache = new Map(); // name -> Promise<objectURL>
   let apiRun = null;          // চলমান API: {n, stem, ctrl, chars}
+  let repoPrivate = null;     // রিপো প্রাইভেট কিনা (Google Lens-এর জন্য): true/false/null=অজানা
   let autoT = 0, autoPause = false;   // অটো OCR: ডিবাউন্স টাইমার; Key/কোটা ত্রুটিতে সাময়িক বিরতি
   const autoTried = new Set();        // এই সেশনে যেসব পেইজে API-১ একবার চলেছে (অটো বা হাতে)
 
@@ -799,6 +802,40 @@
   $('lbDl').addEventListener('click', e => { e.stopPropagation(); downloadCurrent(); });
   $('btnDl').onclick = downloadCurrent;
 
+  // ---------- Google Lens ----------
+  // পাবলিক রিপো: ছবির raw URL দিয়ে সরাসরি Lens খোলে।
+  // প্রাইভেট/অজানা রিপো: ছবি ক্লিপবোর্ডে কপি করে lens.google.com খোলে — সেখানে Ctrl+V করলেই হবে।
+  async function toPngBlob(blob) {
+    if (blob.type === 'image/png') return blob;
+    const bmp = await createImageBitmap(blob);
+    const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+    c.getContext('2d').drawImage(bmp, 0, 0);
+    return await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('PNG বানানো যায়নি')), 'image/png'));
+  }
+  async function openLens() {
+    if (cur < 0) { toast('কোনো ছবি খোলা নেই', true); return; }
+    const im = images[cur];
+    if (repoPrivate === false) {
+      const raw = 'https://raw.githubusercontent.com/' + cfg.repo + '/' + (cfg.branch ? encodeURIComponent(cfg.branch) : 'HEAD')
+                + '/' + epath(cfg.pagesDir + '/' + im.name);
+      const w = window.open('https://lens.google.com/uploadbyurl?url=' + encodeURIComponent(raw), '_blank', 'noopener');
+      toast(w ? 'Google Lens খোলা হয়েছে — সেখানে "Text" চেপে টেক্সট কপি করুন'
+              : 'পপ-আপ ব্লক করা আছে — এই সাইটের জন্য পপ-আপ অনুমতি দিন', !w, 5000);
+      return;
+    }
+    try {
+      toast('ছবি কপি করা হচ্ছে…', false, 4000);
+      const blob = await (await fetch(await getImage(im.name))).blob();
+      await navigator.clipboard.write([new ClipboardItem({'image/png': await toPngBlob(blob)})]);
+      const w = window.open('https://lens.google.com/', '_blank', 'noopener');
+      toast(w ? 'ছবি কপি হয়েছে — Lens পেইজে Ctrl+V (মোবাইলে পেস্ট) করুন'
+              : 'ছবি কপি হয়েছে, কিন্তু পপ-আপ ব্লক — lens.google.com হাতে খুলে পেস্ট করুন', !w, 6000);
+    } catch (e) {
+      toast('ছবি স্বয়ংক্রিয়ভাবে দেওয়া যায়নি (' + (e && e.message || e) + ') — ডাউনলোড করে lens.google.com-এ আপলোড করুন', true, 7000);
+    }
+  }
+  $('btnLens').onclick = openLens;
+
   // ---------- পেইজ লোড ----------
   async function loadPage() {
     stopPlay();                         // পেইজ বদলালে শোনা বন্ধ
@@ -938,6 +975,7 @@
       const ri = await api('');
       if (!ri.ok) throw new Error(await errMsg(ri));
       const info = await ri.json();
+      repoPrivate = !!info.private;
       if (cfg.token && info.permissions && info.permissions.push === false)
         toast('এই টোকেনে রিপোতে লেখার অনুমতি নেই (Contents: Read and write দিন)', true, 6000);
       const br = cfg.branch || info.default_branch;
